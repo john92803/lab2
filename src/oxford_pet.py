@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
@@ -41,6 +42,14 @@ class OxfordPetDataset(Dataset):
             std=[0.229, 0.224, 0.225]
         )
 
+        # 訓練時才用的顏色擴增（只套用在 image，不套用在 mask）
+        self.color_jitter = T.ColorJitter(
+            brightness=0.3,
+            contrast=0.3,
+            saturation=0.2,
+            hue=0.05
+        )
+
     def __len__(self):
         return len(self.ids)
 
@@ -72,6 +81,16 @@ class OxfordPetDataset(Dataset):
 
         image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
         mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
+
+        # ===== 資料擴增（只在 train mode 執行）=====
+        if self.mode == "train":
+            # 水平翻轉：image 和 mask 使用相同的隨機決定
+            if random.random() > 0.5:
+                image = TF.hflip(image)
+                mask  = TF.hflip(mask)
+
+            # 顏色抖動：只套用在 image，mask 不做顏色變換
+            image = self.color_jitter(image)
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)

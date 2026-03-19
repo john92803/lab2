@@ -16,9 +16,8 @@ def dice_score(pred, target, threshold=0.5, smooth=1e-6):
     Returns:
         mean dice score (scalar)
     """
-    # Apply sigmoid if logits (values outside [0,1])
-    if pred.min() < 0 or pred.max() > 1:
-        pred = torch.sigmoid(pred)
+    # Always apply sigmoid: model outputs raw logits
+    pred = torch.sigmoid(pred)
 
     # Binarize prediction
     pred_binary = (pred > threshold).float()
