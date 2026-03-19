@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import torch
 import csv
+from PIL import Image
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -63,13 +64,22 @@ def main(args):
     results = []
 
     with torch.no_grad():
-        for images, names in test_loader:
+        for images, names, orig_ws, orig_hs in test_loader:
             images = images.to(device)
             outputs = model(images)                         # [B, 1, H, W] logits
             preds = (torch.sigmoid(outputs) > 0.5).float()  # [B, 1, H, W] 二值化
 
             for i in range(images.size(0)):
-                mask = preds[i, 0].cpu().numpy()             # (H, W)
+                mask = preds[i, 0].cpu().numpy()             # (H, W) float 0/1
+
+                # 還原回原始圖片尺寸
+                orig_w = int(orig_ws[i])
+                orig_h = int(orig_hs[i])
+                if mask.shape != (orig_h, orig_w):
+                    mask_img = Image.fromarray(mask.astype(np.uint8))
+                    mask_img = mask_img.resize((orig_w, orig_h), Image.NEAREST)
+                    mask = np.array(mask_img).astype(np.float32)
+
                 rle = mask_to_rle(mask)
                 results.append((names[i], rle))
 

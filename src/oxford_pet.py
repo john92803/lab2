@@ -55,10 +55,15 @@ class OxfordPetDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
 
         if self.mode == "test":
+            # 紀錄原始尺寸 (寬, 高)
+            orig_w, orig_h = image.size
+            
             image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
             image = TF.to_tensor(image)
             image = self.normalize(image)
-            return image, name
+            # 回傳原始寬高
+            return image, name, orig_w, orig_h
+            
 
         mask_path = os.path.join(self.mask_dir, f"{name}.png")
         trimap = Image.open(mask_path)
