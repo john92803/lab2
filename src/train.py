@@ -3,13 +3,13 @@ import sys
 import argparse
 import torch
 import torch.nn as nn
+from tqdm import tqdm  # 新增 tqdm 引入
 
 sys.path.append(os.path.dirname(__file__))
 
 from oxford_pet import get_dataloaders
 from models.unet import UNet
 from utils import dice_score
-
 
 def main(args):
     device = torch.accelerator.current_accelerator()
@@ -39,16 +39,27 @@ def main(args):
         train_dice = 0.0
         num_batches = 0
 
-        for images, masks in train_loader:
+        # 使用 tqdm 包裝 train_loader
+        train_pbar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{args.epochs}] Train")
+        
+        for images, masks in train_pbar:
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, masks)
             loss.backward()
             optimizer.step()
-            train_loss += loss.item()
-            train_dice += dice_score(outputs, masks)
+            
+            # 計算當前 batch 的數值
+            current_loss = loss.item()
+            current_dice = dice_score(outputs, masks)
+            
+            train_loss += current_loss
+            train_dice += current_dice
             num_batches += 1
+            
+            # 更新進度條後方的即時資訊
+            train_pbar.set_postfix({'loss': f"{current_loss:.4f}", 'dice': f"{current_dice:.4f}"})
 
         train_loss /= num_batches
         train_dice /= num_batches
@@ -59,21 +70,32 @@ def main(args):
         val_dice = 0.0
         num_batches = 0
 
+        # 使用 tqdm 包裝 val_loader
+        val_pbar = tqdm(val_loader, desc=f"Epoch [{epoch+1}/{args.epochs}] Val  ")
+        
         with torch.no_grad():
-            for images, masks in val_loader:
+            for images, masks in val_pbar:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
                 loss = criterion(outputs, masks)
-                val_loss += loss.item()
-                val_dice += dice_score(outputs, masks)
+                
+                # 計算當前 batch 的數值
+                current_loss = loss.item()
+                current_dice = dice_score(outputs, masks)
+                
+                val_loss += current_loss
+                val_dice += current_dice
                 num_batches += 1
+                
+                # 更新進度條後方的即時資訊
+                val_pbar.set_postfix({'loss': f"{current_loss:.4f}", 'dice': f"{current_dice:.4f}"})
 
         val_loss /= num_batches
         val_dice /= num_batches
 
-        # --- 印出結果 ---
+        # --- 印出 Epoch 總結 ---
         print(
-            f"Epoch [{epoch+1}/{args.epochs}] "
+            f"-> Epoch [{epoch+1}/{args.epochs}] Summary | "
             f"Train Loss: {train_loss:.4f} | Train Dice: {train_dice:.4f} | "
             f"Val Loss: {val_loss:.4f} | Val Dice: {val_dice:.4f}"
         )
@@ -85,7 +107,6 @@ def main(args):
             print(f"  -> Saved best model (Dice: {best_dice:.4f})")
 
     print(f"\nDone. Best Val Dice: {best_dice:.4f}")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train UNet for binary segmentation")
