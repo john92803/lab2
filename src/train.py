@@ -26,11 +26,13 @@ def main(args):
     model = UNet(in_channels=3, out_channels=1).to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     # ===== 訓練 =====
     save_path = os.path.abspath(args.save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     best_dice = 0.0
+    epochs_no_improve = 0
 
     for epoch in range(args.epochs):
         # --- 訓練 ---
@@ -93,18 +95,30 @@ def main(args):
         val_loss /= num_batches
         val_dice /= num_batches
 
+        # --- Scheduler 更新 ---
+        scheduler.step()
+        current_lr = scheduler.get_last_lr()[0]
+
         # --- 印出 Epoch 總結 ---
         print(
             f"-> Epoch [{epoch+1}/{args.epochs}] Summary | "
             f"Train Loss: {train_loss:.4f} | Train Dice: {train_dice:.4f} | "
-            f"Val Loss: {val_loss:.4f} | Val Dice: {val_dice:.4f}"
+            f"Val Loss: {val_loss:.4f} | Val Dice: {val_dice:.4f} | "
+            f"LR: {current_lr:.2e}"
         )
 
-        # --- 儲存最佳模型 ---
+        # --- 儲存最佳模型 / Early Stopping ---
         if val_dice > best_dice:
             best_dice = val_dice
+            epochs_no_improve = 0
             torch.save(model.state_dict(), save_path)
             print(f"  -> Saved best model (Dice: {best_dice:.4f})")
+        else:
+            epochs_no_improve += 1
+            print(f"  -> No improvement ({epochs_no_improve}/{args.patience})")
+            if epochs_no_improve >= args.patience:
+                print(f"Early stopping triggered at epoch {epoch+1}")
+                break
 
     print(f"\nDone. Best Val Dice: {best_dice:.4f}")
 
@@ -118,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--img_size", type=int, default=256)
     parser.add_argument("--num_workers", type=int, default=2)
+    parser.add_argument("--patience", type=int, default=5)
     args = parser.parse_args()
 
     main(args)
