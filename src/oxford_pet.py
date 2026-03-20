@@ -89,6 +89,10 @@ class OxfordPetDataset(Dataset):
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
+            # Gaussian Blur：只套用在 image，mask 不做模糊
+            if random.random() > 0.5:
+                image = TF.gaussian_blur(image, kernel_size=5, sigma=(0.1, 2.0))
+
             # 顏色抖動：只套用在 image，mask 不做顏色變換
             image = self.color_jitter(image)
 
