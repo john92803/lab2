@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from oxford_pet import get_dataloaders
 from models.unet import UNet
-from utils import dice_score
+from utils import dice_score, dice_loss
 
 def main(args):
     device = torch.accelerator.current_accelerator()
@@ -48,7 +48,7 @@ def main(args):
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
             outputs = model(images)
-            loss = criterion(outputs, masks)
+            loss = criterion(outputs, masks) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
             
