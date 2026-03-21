@@ -16,13 +16,6 @@ def main(args):
     device = torch.accelerator.current_accelerator()
     print(f"device: {device}")
 
-    # ===== 資料 =====
-    data_root = os.path.abspath(args.data_root)
-    train_loader, val_loader, _ = get_dataloaders(
-        data_root, test_file=args.test_file,
-        img_size=args.img_size, batch_size=args.batch_size, num_workers=args.num_workers
-    )
-
     # ===== 根據模型自動設定預設路徑 =====
     if args.model == "unet":
         args.test_file = "test_unet.txt"
@@ -34,6 +27,13 @@ def main(args):
         model = ResNet34UNet(out_channels=1).to(device)
     else:
         raise ValueError(f"Unknown model: {args.model}")
+
+    # ===== 資料 =====
+    data_root = os.path.abspath(args.data_root)
+    train_loader, val_loader, _ = get_dataloaders(
+        data_root, test_file=args.test_file,
+        img_size=args.img_size, batch_size=args.batch_size, num_workers=args.num_workers
+    )
     print(f"Model: {args.model} | Parameters: {sum(p.numel() for p in model.parameters()):,}")
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)

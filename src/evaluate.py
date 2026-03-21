@@ -7,12 +7,25 @@ sys.path.append(os.path.dirname(__file__))
 
 from oxford_pet import get_dataloaders
 from models.unet import UNet
+from models.resnet34_unet import ResNet34UNet
 from utils import dice_score
 
 
 def main(args):
     device = torch.accelerator.current_accelerator()
     print(f"device: {device}")
+
+    # ===== 根據模型自動設定預設路徑 =====
+    if args.model == "unet":
+        args.test_file = "test_unet.txt"
+        args.model_path = "saved_models/unet_best.pth"
+        model = UNet(in_channels=3, out_channels=1).to(device)
+    elif args.model == "resnet34_unet":
+        args.test_file = "test_res_unet.txt"
+        args.model_path = "saved_models/resnet34_unet_best.pth"
+        model = ResNet34UNet(out_channels=1).to(device)
+    else:
+        raise ValueError(f"Unknown model: {args.model}")
 
     # ===== 資料 =====
     data_root = os.path.abspath(args.data_root)
@@ -22,9 +35,6 @@ def main(args):
     )
 
     # ===== 載入模型 =====
-    model = UNet(in_channels=3, out_channels=1).to(device)
-
-    # TODO: 用 torch.load 讀取權重，再用 model.load_state_dict 載入
     state_dict = torch.load(args.model_path, map_location=device)
     model.load_state_dict(state_dict)
 
@@ -47,8 +57,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate UNet on validation set")
     parser.add_argument("--data_root", type=str, default="dataset/oxford-iiit-pet")
-    parser.add_argument("--test_file", type=str, default="test_unet.txt")
-    parser.add_argument("--model_path", type=str, default="saved_models/unet_best.pth")
+    parser.add_argument("--model", type=str, default="unet", choices=["unet", "resnet34_unet"])
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--img_size", type=int, default=256)
     parser.add_argument("--num_workers", type=int, default=2)
