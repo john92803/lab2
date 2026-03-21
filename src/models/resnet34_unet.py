@@ -18,11 +18,29 @@ class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
         # TODO: 定義兩層 Conv + BN，以及 shortcut（如果需要的話）
-        raise NotImplementedError
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(out_channels)    
+        )
+        self.downsample = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
+                nn.BatchNorm2d(out_channels)
+            )
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
         # TODO: 主路徑 + shortcut -> ReLU
-        raise NotImplementedError
+        identity = x
+        out = self.conv(x)
+        if self.downsample is not None:
+            identity = self.downsample(x)
+        out += identity
+        return self.relu(out)
 
 
 class ResNet34Encoder(nn.Module):
@@ -47,8 +65,17 @@ class ResNet34Encoder(nn.Module):
     def __init__(self):
         super().__init__()
         # TODO: 定義 initial 層 (conv7x7 + bn + relu + maxpool)
+        self.init = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        )
         # TODO: 定義 4 個 stage
-        raise NotImplementedError
+        self.st1 = self._make_stage(64, 64, 3, stride=1)
+        self.st2 = self._make_stage(64, 128, 4, stride=2)
+        self.st3 = self._make_stage(128, 256, 6, stride=2)
+        self.st4 = self._make_stage(256, 512, 3, stride=2)
 
     def _make_stage(self, in_channels, out_channels, num_blocks, stride=1):
         """
@@ -60,7 +87,11 @@ class ResNet34Encoder(nn.Module):
         - 第一個 block 的 in_channels 可能和 out_channels 不同
         """
         # TODO: 回傳 nn.Sequential(block1, block2, ...)
-        raise NotImplementedError
+        layer = []
+        layer.append(BasicBlock(in_channels, out_channels, stride))
+        for _ in range(1, num_blocks):
+            layer.append(BasicBlock(out_channels, out_channels))
+        return nn.Sequential(*layer)
 
     def forward(self, x):
         """
@@ -74,7 +105,13 @@ class ResNet34Encoder(nn.Module):
             - s4:        [B, 512,  8,  8]
         """
         # TODO
-        raise NotImplementedError
+        s0 = self.init(x)
+        s1 = self.st1(s0)
+        s2 = self.st2(s1)
+        s3 = self.st3(s2)
+        s4 = self.st4(s3)
+        return s0, s1, s2, s3, s4
+
 
 
 class DecoderBlock(nn.Module):
@@ -92,11 +129,22 @@ class DecoderBlock(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels):
         super().__init__()
         # TODO: 定義上採樣層和兩層 Conv + BN + ReLU
-        raise NotImplementedError
+        self.up = nn.ConvTranspose2d(in_channels, in_channels, kernel_size=2, stride=2)
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels + skip_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
 
     def forward(self, x, skip):
         # TODO: 上採樣 -> cat -> conv -> conv
-        raise NotImplementedError
+        x = self.up(x)
+        x = torch.cat([x, skip], dim=1)
+        x = self.conv(x)
+        return x
 
 
 class ResNet34UNet(nn.Module):
@@ -130,7 +178,16 @@ class ResNet34UNet(nn.Module):
     def __init__(self, out_channels=1):
         super().__init__()
         # TODO: 定義 encoder, decoder blocks, final upsample + output conv
-        raise NotImplementedError
+        self.en = ResNet34Encoder()
+        self.dec1 = DecoderBlock(512, 256, 256)
+        self.dec2 = DecoderBlock(256, 128, 128)
+        self.dec3 = DecoderBlock(128, 64, 64)
+        self.dec4 = DecoderBlock(64, 64, 32)
+        self.final = nn.Sequential(
+            nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+        )
+        self.output = nn.Conv2d(32, out_channels, kernel_size=1)
 
     def forward(self, x):
         """
@@ -140,14 +197,13 @@ class ResNet34UNet(nn.Module):
             [B, 1, H, W] logits
         """
         # TODO: encoder -> decoder with skips -> upsample -> output
-        raise NotImplementedError
+        s0, s1, s2, s3, s4 = self.en(x)
+        d1 = self.dec1(s4, s3)
+        d2 = self.dec2(d1, s2)  
+        d3 = self.dec3(d2, s1)
+        d4 = self.dec4(d3, s0)  
+        o = self.final(d4)
+        
+        return self.output(o)
 
 
-if __name__ == "__main__":
-    # 測試模型能否正常跑
-    model = ResNet34UNet(out_channels=1)
-    x = torch.randn(2, 3, 256, 256)
-    out = model(x)
-    print(f"Input:  {x.shape}")
-    print(f"Output: {out.shape}")  # 預期: [2, 1, 256, 256]
-    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")

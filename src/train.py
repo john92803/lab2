@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from oxford_pet import get_dataloaders
 from models.unet import UNet
+from models.resnet34_unet import ResNet34UNet
 from utils import dice_score, dice_loss
 
 def main(args):
@@ -22,8 +23,18 @@ def main(args):
         img_size=args.img_size, batch_size=args.batch_size, num_workers=args.num_workers
     )
 
-    # ===== 模型、損失函數、優化器 =====
-    model = UNet(in_channels=3, out_channels=1).to(device)
+    # ===== 根據模型自動設定預設路徑 =====
+    if args.model == "unet":
+        args.test_file = "test_unet.txt"
+        args.save_path = "saved_models/unet_best.pth"
+        model = UNet(in_channels=3, out_channels=1).to(device)
+    elif args.model == "resnet34_unet":
+        args.test_file = "test_res_unet.txt"
+        args.save_path = "saved_models/resnet34_unet_best.pth"
+        model = ResNet34UNet(out_channels=1).to(device)
+    else:
+        raise ValueError(f"Unknown model: {args.model}")
+    print(f"Model: {args.model} | Parameters: {sum(p.numel() for p in model.parameters()):,}")
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
@@ -125,8 +136,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train UNet for binary segmentation")
     parser.add_argument("--data_root", type=str, default="dataset/oxford-iiit-pet")
-    parser.add_argument("--test_file", type=str, default="test_unet.txt")
-    parser.add_argument("--save_path", type=str, default="saved_models/unet_best.pth")
+    parser.add_argument("--model", type=str, default="unet", choices=["unet", "resnet34_unet"])
+    parser.add_argument("--test_file", type=str)
+    parser.add_argument("--save_path", type=str)
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
@@ -134,5 +146,4 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--patience", type=int, default=5)
     args = parser.parse_args()
-
     main(args)

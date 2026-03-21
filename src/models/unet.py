@@ -142,11 +142,3 @@ class UNet(nn.Module):
 
 
 
-if __name__ == "__main__":
-    # 測試模型能否正常跑
-    model = UNet(in_channels=3, out_channels=1)
-    x = torch.randn(2, 3, 256, 256)
-    out = model(x)
-    print(f"Input:  {x.shape}")
-    print(f"Output: {out.shape}")  # 預期: [2, 1, 256, 256]
-    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
