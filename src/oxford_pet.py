@@ -44,10 +44,10 @@ class OxfordPetDataset(Dataset):
 
         # 訓練時才用的顏色擴增（只套用在 image，不套用在 mask）
         self.color_jitter = T.ColorJitter(
-            brightness=0.3,
-            contrast=0.3,
-            saturation=0.2,
-            hue=0.05
+            brightness=0.5,   # 亮度變化 ±50%
+            contrast=0.5,     # 對比度變化 ±50%
+            saturation=0.4,   # 飽和度變化 ±40%
+            hue=0.1           # 色調偏移 ±10%
         )
 
     def __len__(self):
@@ -89,12 +89,12 @@ class OxfordPetDataset(Dataset):
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
-            # Gaussian Blur：只套用在 image，mask 不做模糊
-            if random.random() > 0.5:
-                image = TF.gaussian_blur(image, kernel_size=5, sigma=(0.1, 2.0))
-
-            # 顏色抖動：只套用在 image，mask 不做顏色變換
+            # 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
             image = self.color_jitter(image)
+
+            # 隨機灰階：10% 機率轉成灰階，讓模型不過度依賴顏色
+            if random.random() < 0.1:
+                image = TF.rgb_to_grayscale(image, num_output_channels=3)
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)
