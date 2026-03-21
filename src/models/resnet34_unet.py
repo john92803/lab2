@@ -179,10 +179,19 @@ class ResNet34UNet(nn.Module):
         super().__init__()
         # TODO: 定義 encoder, decoder blocks, final upsample + output conv
         self.en = ResNet34Encoder()
-        self.dec1 = DecoderBlock(512, 256, 256)
-        self.dec2 = DecoderBlock(256, 128, 128)
-        self.dec3 = DecoderBlock(128, 64, 64)
-        self.dec4 = DecoderBlock(64, 64, 32)
+        self.dec1 = DecoderBlock(512, 256, 256)   # 8->16
+        self.dec2 = DecoderBlock(256, 128, 128)   # 16->32
+        self.dec3 = DecoderBlock(128, 64, 64)     # 32->64
+        # dec4: d3 和 s0 都是 64x64，直接 concat，不需上採樣
+        self.dec4 = nn.Sequential(
+            nn.Conv2d(64 + 64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True)
+        )
+        # final: 64x64 -> 128x128 -> 256x256
         self.final = nn.Sequential(
             nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2),
             nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
@@ -198,12 +207,11 @@ class ResNet34UNet(nn.Module):
         """
         # TODO: encoder -> decoder with skips -> upsample -> output
         s0, s1, s2, s3, s4 = self.en(x)
-        d1 = self.dec1(s4, s3)
-        d2 = self.dec2(d1, s2)  
-        d3 = self.dec3(d2, s1)
-        d4 = self.dec4(d3, s0)  
-        o = self.final(d4)
-        
+        d1 = self.dec1(s4, s3)          # [B,256,16,16]
+        d2 = self.dec2(d1, s2)          # [B,128,32,32]
+        d3 = self.dec3(d2, s1)          # [B,64,64,64]
+        d4 = self.dec4(torch.cat([d3, s0], dim=1))  # [B,32,64,64]
+        o = self.final(d4)              # [B,32,256,256]
         return self.output(o)
 
 
