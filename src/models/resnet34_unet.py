@@ -43,7 +43,7 @@ class BasicBlock(nn.Module):
         return self.relu(out)
 
 
-class ResNet34Encoder(nn.Module):
+class Encoder(nn.Module):
     """
     ResNet-34 編碼器（不含最後的 avgpool 和 fc）
 
@@ -178,7 +178,7 @@ class ResNet34UNet(nn.Module):
     def __init__(self, out_channels=1):
         super().__init__()
         # TODO: 定義 encoder, decoder blocks, final upsample + output conv
-        self.en = ResNet34Encoder()
+        self.en = Encoder()
         self.dec1 = DecoderBlock(512, 256, 256)   # 8->16
         self.dec2 = DecoderBlock(256, 128, 128)   # 16->32
         self.dec3 = DecoderBlock(128, 64, 64)     # 32->64

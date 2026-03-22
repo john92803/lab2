@@ -13,13 +13,11 @@ class DoubleConv(nn.Module):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        # TODO: 定義兩層 Conv + BN + ReLU
+        # 原始 UNet 論文：unpadded Conv3x3 -> ReLU -> Conv3x3 -> ReLU（無 padding、無 BN）
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=0),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=0),
             nn.ReLU(inplace=True)
         )
 
@@ -72,9 +70,14 @@ class Decoder(nn.Module):
         self.Dconv = DoubleConv(in_channels, out_channels) 
 
     def forward(self, x, skip):
-        # TODO: 上採樣 -> cat(x, skip) -> DoubleConv
+        # 上採樣 -> center crop skip -> cat -> DoubleConv
         x = self.UPconv(x)
-        x = torch.cat([x, skip], dim=1)  
+        # center crop skip 使其空間尺寸與 x 相同
+        dh = skip.size(2) - x.size(2)
+        dw = skip.size(3) - x.size(3)
+        skip = skip[:, :, dh // 2 : dh // 2 + x.size(2),
+                         dw // 2 : dw // 2 + x.size(3)]
+        x = torch.cat([x, skip], dim=1)
         x = self.Dconv(x)
         return x
 

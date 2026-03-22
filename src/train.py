@@ -3,6 +3,7 @@ import sys
 import argparse
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tqdm import tqdm  # 新增 tqdm 引入
 
 sys.path.append(os.path.dirname(__file__))
@@ -61,6 +62,8 @@ def main(args):
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
             outputs = model(images)
+            if outputs.shape[-2:] != masks.shape[-2:]:
+                outputs = F.interpolate(outputs, size=masks.shape[-2:], mode='bilinear', align_corners=False)
             loss = criterion(outputs, masks) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
@@ -92,6 +95,8 @@ def main(args):
             for images, masks in val_pbar:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
+                if outputs.shape[-2:] != masks.shape[-2:]:
+                    outputs = F.interpolate(outputs, size=masks.shape[-2:], mode='bilinear', align_corners=False)
                 loss = criterion(outputs, masks)
                 
                 # 計算當前 batch 的數值
