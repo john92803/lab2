@@ -72,7 +72,6 @@ class Decoder(nn.Module):
     def forward(self, x, skip):
         # 上採樣 -> center crop skip -> cat -> DoubleConv
         x = self.UPconv(x)
-        # center crop skip 使其空間尺寸與 x 相同
         dh = skip.size(2) - x.size(2)
         dw = skip.size(3) - x.size(3)
         skip = skip[:, :, dh // 2 : dh // 2 + x.size(2),

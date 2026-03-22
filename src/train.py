@@ -63,7 +63,10 @@ def main(args):
             optimizer.zero_grad()
             outputs = model(images)
             if outputs.shape[-2:] != masks.shape[-2:]:
-                outputs = F.interpolate(outputs, size=masks.shape[-2:], mode='bilinear', align_corners=False)
+                oh, ow = outputs.shape[-2], outputs.shape[-1]
+                dh = (masks.shape[-2] - oh) // 2
+                dw = (masks.shape[-1] - ow) // 2
+                masks = masks[:, :, dh:dh+oh, dw:dw+ow]
             loss = criterion(outputs, masks) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
@@ -96,7 +99,10 @@ def main(args):
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
                 if outputs.shape[-2:] != masks.shape[-2:]:
-                    outputs = F.interpolate(outputs, size=masks.shape[-2:], mode='bilinear', align_corners=False)
+                    oh, ow = outputs.shape[-2], outputs.shape[-1]
+                    dh = (masks.shape[-2] - oh) // 2
+                    dw = (masks.shape[-1] - ow) // 2
+                    masks = masks[:, :, dh:dh+oh, dw:dw+ow]
                 loss = criterion(outputs, masks)
                 
                 # 計算當前 batch 的數值
