@@ -23,8 +23,8 @@ def dice_score(pred, target, threshold=0.5, smooth=1e-6):
     pred_binary = (pred > threshold).float()
 
     # Flatten spatial dimensions
-    pred_flat = pred_binary.view(pred.size(0), -1)
-    target_flat = target.view(target.size(0), -1)
+    pred_flat = pred_binary.reshape(pred.size(0), -1)
+    target_flat = target.reshape(target.size(0), -1)
 
     # Compute per-sample dice
     intersection = (pred_flat * target_flat).sum(dim=1)
@@ -45,8 +45,8 @@ def dice_loss(pred, target, smooth=1e-6):
     """
     pred_prob = torch.sigmoid(pred)
 
-    pred_flat = pred_prob.view(pred.size(0), -1)
-    target_flat = target.view(target.size(0), -1)
+    pred_flat = pred_prob.reshape(pred.size(0), -1)
+    target_flat = target.reshape(target.size(0), -1)
 
     intersection = (pred_flat * target_flat).sum(dim=1)
     dice = (2.0 * intersection + smooth) / (pred_flat.sum(dim=1) + target_flat.sum(dim=1) + smooth)
