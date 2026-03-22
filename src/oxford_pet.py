@@ -89,6 +89,11 @@ class OxfordPetDataset(Dataset):
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
+            # 隨機旋轉 ±10 度：image 和 mask 套用相同角度
+            angle = random.uniform(-10, 10)
+            image = TF.rotate(image, angle)
+            mask  = TF.rotate(mask,  angle)
+
             # 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
             image = self.color_jitter(image)
 

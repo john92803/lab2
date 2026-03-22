@@ -37,7 +37,9 @@ def main(args):
     print(f"Model: {args.model} | Parameters: {sum(p.numel() for p in model.parameters()):,}")
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='max', factor=0.5, patience=5, min_lr=1e-6
+    )
 
     # ===== 訓練 =====
     save_path = os.path.abspath(args.save_path)
@@ -107,8 +109,8 @@ def main(args):
         val_dice /= num_batches
 
         # --- Scheduler 更新 ---
-        scheduler.step()
-        current_lr = scheduler.get_last_lr()[0]
+        scheduler.step(val_dice)
+        current_lr = optimizer.param_groups[0]['lr']
 
         # --- 印出 Epoch 總結 ---
         print(
