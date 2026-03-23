@@ -60,22 +60,15 @@ def main(args):
         
         for images, masks in train_pbar:
             images, masks = images.to(device), masks.to(device)
-
-            # UNet (padding=0): mirror pad 256→572（原始論文做法）
-            if args.model == "unet":
-                pad = (572 - images.shape[-1]) // 2  # 158
-                images = F.pad(images, (pad, pad, pad, pad), mode='reflect')
-
             optimizer.zero_grad()
             outputs = model(images)
 
-            # 裁切 output 以匹配 mask 大小（UNet: 388→256）
+            # padding=0 時 output 比 input 小，center crop mask 以匹配
             if outputs.shape[-2:] != masks.shape[-2:]:
                 oh, ow = outputs.shape[-2], outputs.shape[-1]
-                mh, mw = masks.shape[-2], masks.shape[-1]
-                dh = (oh - mh) // 2
-                dw = (ow - mw) // 2
-                outputs = outputs[:, :, dh:dh+mh, dw:dw+mw]
+                dh = (masks.shape[-2] - oh) // 2
+                dw = (masks.shape[-1] - ow) // 2
+                masks = masks[:, :, dh:dh+oh, dw:dw+ow]
             loss = criterion(outputs, masks) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
@@ -106,21 +99,14 @@ def main(args):
         with torch.no_grad():
             for images, masks in val_pbar:
                 images, masks = images.to(device), masks.to(device)
-
-                # UNet (padding=0): mirror pad 256→572
-                if args.model == "unet":
-                    pad = (572 - images.shape[-1]) // 2
-                    images = F.pad(images, (pad, pad, pad, pad), mode='reflect')
-
                 outputs = model(images)
 
-                # 裁切 output 以匹配 mask 大小
+                # padding=0 時 center crop mask
                 if outputs.shape[-2:] != masks.shape[-2:]:
                     oh, ow = outputs.shape[-2], outputs.shape[-1]
-                    mh, mw = masks.shape[-2], masks.shape[-1]
-                    dh = (oh - mh) // 2
-                    dw = (ow - mw) // 2
-                    outputs = outputs[:, :, dh:dh+mh, dw:dw+mw]
+                    dh = (masks.shape[-2] - oh) // 2
+                    dw = (masks.shape[-1] - ow) // 2
+                    masks = masks[:, :, dh:dh+oh, dw:dw+ow]
                 loss = criterion(outputs, masks)
                 
                 # 計算當前 batch 的數值

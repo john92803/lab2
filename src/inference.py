@@ -79,29 +79,24 @@ def main(args):
     with torch.no_grad():
         for images, names, orig_ws, orig_hs in test_loader:
             images = images.to(device)
-
-            # UNet (padding=0): mirror pad 256→572（原始論文做法）
-            if args.model == "unet":
-                pad = (572 - images.shape[-1]) // 2  # 158
-                images = F.pad(images, (pad, pad, pad, pad), mode='reflect')
-
             outputs = model(images)                         # [B, 1, H, W] logits
-
-            # UNet: 裁切 output 回 img_size（388→256）
-            if outputs.shape[-2] != args.img_size:
-                oh, ow = outputs.shape[-2], outputs.shape[-1]
-                dh = (oh - args.img_size) // 2
-                dw = (ow - args.img_size) // 2
-                outputs = outputs[:, :, dh:dh+args.img_size, dw:dw+args.img_size]
-
             preds = (torch.sigmoid(outputs) > 0.5).float()  # [B, 1, H, W] 二值化
 
             for i in range(images.size(0)):
                 mask = preds[i, 0].cpu().numpy()             # (H, W) float 0/1
-
-                # 還原回原始圖片尺寸
                 orig_w = int(orig_ws[i])
                 orig_h = int(orig_hs[i])
+
+                # padding=0 時輸出比輸入小：放回 img_size 中心，邊緣填 0（背景）
+                out_h, out_w = mask.shape
+                if out_h != args.img_size or out_w != args.img_size:
+                    canvas = np.zeros((args.img_size, args.img_size), dtype=np.float32)
+                    pad_h = (args.img_size - out_h) // 2
+                    pad_w = (args.img_size - out_w) // 2
+                    canvas[pad_h:pad_h+out_h, pad_w:pad_w+out_w] = mask
+                    mask = canvas
+
+                # 還原回原始圖片尺寸
                 if mask.shape != (orig_h, orig_w):
                     mask_img = Image.fromarray(mask.astype(np.uint8))
                     mask_img = mask_img.resize((orig_w, orig_h), Image.NEAREST)
