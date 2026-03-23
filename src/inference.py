@@ -3,6 +3,7 @@ import sys
 import argparse
 import numpy as np
 import torch
+import torch.nn.functional as F
 import csv
 from PIL import Image
 
@@ -78,7 +79,21 @@ def main(args):
     with torch.no_grad():
         for images, names, orig_ws, orig_hs in test_loader:
             images = images.to(device)
+
+            # UNet (padding=0): mirror pad 256→572（原始論文做法）
+            if args.model == "unet":
+                pad = (572 - images.shape[-1]) // 2  # 158
+                images = F.pad(images, (pad, pad, pad, pad), mode='reflect')
+
             outputs = model(images)                         # [B, 1, H, W] logits
+
+            # UNet: 裁切 output 回 img_size（388→256）
+            if outputs.shape[-2] != args.img_size:
+                oh, ow = outputs.shape[-2], outputs.shape[-1]
+                dh = (oh - args.img_size) // 2
+                dw = (ow - args.img_size) // 2
+                outputs = outputs[:, :, dh:dh+args.img_size, dw:dw+args.img_size]
+
             preds = (torch.sigmoid(outputs) > 0.5).float()  # [B, 1, H, W] 二值化
 
             for i in range(images.size(0)):

@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import torch
+import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -46,7 +47,22 @@ def main(args):
     with torch.no_grad():
         for images, masks in val_loader:
             images, masks = images.to(device), masks.to(device)
+
+            # UNet (padding=0): mirror pad 256→572
+            if args.model == "unet":
+                pad = (572 - images.shape[-1]) // 2
+                images = F.pad(images, (pad, pad, pad, pad), mode='reflect')
+
             outputs = model(images)
+
+            # 裁切 output 以匹配 mask 大小
+            if outputs.shape[-2:] != masks.shape[-2:]:
+                oh, ow = outputs.shape[-2], outputs.shape[-1]
+                mh, mw = masks.shape[-2], masks.shape[-1]
+                dh = (oh - mh) // 2
+                dw = (ow - mw) // 2
+                outputs = outputs[:, :, dh:dh+mh, dw:dw+mw]
+
             total_dice += dice_score(outputs, masks)
             num_batches += 1
 
