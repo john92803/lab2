@@ -5,7 +5,6 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
-import torch
 
 
 class OxfordPetDataset(Dataset):
@@ -79,27 +78,36 @@ class OxfordPetDataset(Dataset):
         binary_np = self._trimap_to_binary(trimap)
         mask = Image.fromarray(binary_np)
 
-        image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
-        mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
-
         # ===== 資料擴增（只在 train mode 執行）=====
         if self.mode == "train":
-            # 水平翻轉：image 和 mask 使用相同的隨機決定
+            # ① RandomResizedCrop（取代固定 resize）
+            #    用 get_params 取得一組隨機裁切參數，image 和 mask 同步套用
+            i, j, h, w = T.RandomResizedCrop.get_params(
+                image, scale=(0.7, 1.0), ratio=(3/4, 4/3)
+            )
+            image = TF.resized_crop(image, i, j, h, w, (self.img_size, self.img_size), Image.BILINEAR)
+            mask  = TF.resized_crop(mask,  i, j, h, w, (self.img_size, self.img_size), Image.NEAREST)
+
+            # ② 水平翻轉：image 和 mask 使用相同的隨機決定
             if random.random() > 0.5:
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
-            # 隨機旋轉 ±10 度：image 和 mask 套用相同角度
+            # ③ 隨機旋轉 ±10 度：image 和 mask 套用相同角度
             angle = random.uniform(-10, 10)
             image = TF.rotate(image, angle)
             mask  = TF.rotate(mask,  angle)
 
-            # 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
+            # ④ 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
             image = self.color_jitter(image)
 
-            # 隨機灰階：10% 機率轉成灰階，讓模型不過度依賴顏色
+            # ⑤ 隨機灰階：10% 機率轉成灰階，讓模型不過度依賴顏色
             if random.random() < 0.1:
                 image = TF.rgb_to_grayscale(image, num_output_channels=3)
+        else:
+            # val/test：固定 resize，不做任何增強
+            image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
+            mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)

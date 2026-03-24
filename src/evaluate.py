@@ -2,7 +2,6 @@ import os
 import sys
 import argparse
 import torch
-import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(__file__))
 

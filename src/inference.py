@@ -87,13 +87,15 @@ def main(args):
                 orig_h = int(orig_hs[i])
 
                 # padding=0 時輸出比輸入小（UNet 256×256 → 68×68）
-                # 直接 bilinear resize 到 img_size，覆蓋整張圖
-                # （避免 zero-pad 導致 93% 邊緣被強制預測為背景）
+                # 68×68 對應 input 的中央區域（spatial correspondence 正確）
+                # 放回中心，邊緣填 0（背景）
                 out_h, out_w = mask.shape
                 if out_h != args.img_size or out_w != args.img_size:
-                    mask_img = Image.fromarray(mask.astype(np.uint8))
-                    mask_img = mask_img.resize((args.img_size, args.img_size), Image.BILINEAR)
-                    mask = (np.array(mask_img) > 0.5).astype(np.float32)
+                    canvas = np.zeros((args.img_size, args.img_size), dtype=np.float32)
+                    pad_h = (args.img_size - out_h) // 2
+                    pad_w = (args.img_size - out_w) // 2
+                    canvas[pad_h:pad_h+out_h, pad_w:pad_w+out_w] = mask
+                    mask = canvas
 
                 # 還原回原始圖片尺寸
                 if mask.shape != (orig_h, orig_w):
