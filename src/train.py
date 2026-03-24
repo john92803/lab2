@@ -3,7 +3,8 @@ import sys
 import argparse
 import torch
 import torch.nn as nn
-from tqdm import tqdm  # 新增 tqdm 引入
+import torch.nn.functional as F
+from tqdm import tqdm
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -35,6 +36,20 @@ def main(args):
         img_size=args.img_size, batch_size=args.batch_size, num_workers=args.num_workers
     )
     print(f"Model: {args.model} | Parameters: {sum(p.numel() for p in model.parameters()):,}")
+
+    # ===== Overlap-tile：計算 border_pad（與 inference.py 一致）=====
+    # UNet padding=0 輸出 < 輸入 → 訓練/val 也套用 overlap-tile，使 loss 涵蓋完整圖片
+    # ResNet34UNet 輸出 = 輸入 → border_pad=0，不做任何改動
+    with torch.no_grad():
+        _dummy = torch.zeros(1, 3, args.img_size, args.img_size).to(device)
+        _out_size = model(_dummy).shape[-1]
+    border_pad = (args.img_size - _out_size) // 2
+    if border_pad > 0:
+        print(f"Overlap-tile strategy 啟用（UNet padding=0）: border_pad={border_pad}px")
+        print(f"  訓練/val 輸入: {args.img_size} → {args.img_size + 2*border_pad}（reflect pad）→ 輸出 crop 回 {args.img_size}")
+    else:
+        print(f"Overlap-tile 不需要（輸出與輸入同尺寸）")
+
     # 根據模型選擇 loss 和 optimizer（論文: ResNet34_UNet 用 Focal+Dice, SGD）
     if args.model == "resnet34_unet":
         use_focal = True
@@ -67,14 +82,18 @@ def main(args):
         for images, masks in train_pbar:
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
-            outputs = model(images)
 
-            # padding=0 時 output 比 input 小，center crop mask 以匹配
-            if outputs.shape[-2:] != masks.shape[-2:]:
-                oh, ow = outputs.shape[-2], outputs.shape[-1]
-                dh = (masks.shape[-2] - oh) // 2
-                dw = (masks.shape[-1] - ow) // 2
-                masks = masks[:, :, dh:dh+oh, dw:dw+ow]
+            # Overlap-tile：reflect pad → model → center crop
+            # border_pad=0 時等同直接呼叫 model(images)
+            if border_pad > 0:
+                images = F.pad(images, (border_pad,)*4, mode='reflect')
+                outputs = model(images)
+                crop = (outputs.shape[-1] - args.img_size) // 2
+                outputs = outputs[:, :, crop:crop+args.img_size, crop:crop+args.img_size]
+            else:
+                outputs = model(images)
+            # outputs 現在與 masks 尺寸一致（img_size × img_size），不需 center crop mask
+
             if use_focal:
                 loss = focal_loss(outputs, masks) + dice_loss(outputs, masks)
             else:
@@ -108,14 +127,16 @@ def main(args):
         with torch.no_grad():
             for images, masks in val_pbar:
                 images, masks = images.to(device), masks.to(device)
-                outputs = model(images)
 
-                # padding=0 時 center crop mask
-                if outputs.shape[-2:] != masks.shape[-2:]:
-                    oh, ow = outputs.shape[-2], outputs.shape[-1]
-                    dh = (masks.shape[-2] - oh) // 2
-                    dw = (masks.shape[-1] - ow) // 2
-                    masks = masks[:, :, dh:dh+oh, dw:dw+ow]
+                # Overlap-tile（同訓練，與 inference 一致）
+                if border_pad > 0:
+                    images = F.pad(images, (border_pad,)*4, mode='reflect')
+                    outputs = model(images)
+                    crop = (outputs.shape[-1] - args.img_size) // 2
+                    outputs = outputs[:, :, crop:crop+args.img_size, crop:crop+args.img_size]
+                else:
+                    outputs = model(images)
+
                 if use_focal:
                     loss = focal_loss(outputs, masks) + dice_loss(outputs, masks)
                 else:
