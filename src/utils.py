@@ -1,6 +1,4 @@
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 def dice_score(pred, target, threshold=0.5, smooth=1e-6):
@@ -54,53 +52,25 @@ def dice_loss(pred, target, smooth=1e-6):
     return (1 - dice).mean()
 
 
-def visualize_predictions(images, masks, preds, num_samples=4, save_path=None):
+def focal_loss(pred, target, alpha=0.25, gamma=2.0):
     """
-    Visualize image, ground truth mask, and predicted mask side by side.
+    Focal Loss for binary segmentation (論文使用).
 
     Args:
-        images: (N, 3, H, W) tensor (normalized)
-        masks: (N, 1, H, W) tensor (binary ground truth)
-        preds: (N, 1, H, W) tensor (model output logits)
-        num_samples: number of samples to show
-        save_path: if provided, save figure to this path
+        pred: prediction logits (N, 1, H, W)
+        target: ground truth (N, 1, H, W) binary
+        alpha: weighting factor for class balance
+        gamma: focusing parameter
+    Returns:
+        focal loss (scalar, differentiable)
     """
-    # Denormalize images
-    mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+    pred_prob = torch.sigmoid(pred)
+    # binary cross entropy per pixel
+    bce = -target * torch.log(pred_prob + 1e-8) - (1 - target) * torch.log(1 - pred_prob + 1e-8)
+    # focal weight
+    pt = target * pred_prob + (1 - target) * (1 - pred_prob)
+    focal_weight = alpha * (1 - pt) ** gamma
+    loss = focal_weight * bce
+    return loss.mean()
 
-    images = images.cpu()
-    masks = masks.cpu()
-    preds = preds.cpu()
 
-    images_denorm = images * std + mean
-    images_denorm = images_denorm.clamp(0, 1)
-
-    pred_binary = (torch.sigmoid(preds) > 0.5).float()
-
-    n = min(num_samples, images.size(0))
-    fig, axes = plt.subplots(n, 3, figsize=(12, 4 * n))
-    if n == 1:
-        axes = axes.unsqueeze(0) if hasattr(axes, 'unsqueeze') else [axes]
-
-    for i in range(n):
-        # Image
-        axes[i][0].imshow(images_denorm[i].permute(1, 2, 0).numpy())
-        axes[i][0].set_title("Image")
-        axes[i][0].axis("off")
-
-        # Ground truth
-        axes[i][1].imshow(masks[i, 0].numpy(), cmap="gray")
-        axes[i][1].set_title("Ground Truth")
-        axes[i][1].axis("off")
-
-        # Prediction
-        axes[i][2].imshow(pred_binary[i, 0].numpy(), cmap="gray")
-        axes[i][2].set_title("Prediction")
-        axes[i][2].axis("off")
-
-    plt.tight_layout()
-    if save_path:
-        plt.savefig(save_path, dpi=100, bbox_inches="tight")
-        print(f"Saved visualization to {save_path}")
-    plt.close()

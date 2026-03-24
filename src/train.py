@@ -3,7 +3,6 @@ import sys
 import argparse
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from tqdm import tqdm  # 新增 tqdm 引入
 
 sys.path.append(os.path.dirname(__file__))
@@ -11,7 +10,7 @@ sys.path.append(os.path.dirname(__file__))
 from oxford_pet import get_dataloaders
 from models.unet import UNet
 from models.resnet34_unet import ResNet34UNet
-from utils import dice_score, dice_loss
+from utils import dice_score, dice_loss, focal_loss
 
 def main(args):
     device = torch.accelerator.current_accelerator()
@@ -36,8 +35,15 @@ def main(args):
         img_size=args.img_size, batch_size=args.batch_size, num_workers=args.num_workers
     )
     print(f"Model: {args.model} | Parameters: {sum(p.numel() for p in model.parameters()):,}")
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    # 根據模型選擇 loss 和 optimizer（論文: ResNet34_UNet 用 Focal+Dice, SGD）
+    if args.model == "resnet34_unet":
+        use_focal = True
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+    else:
+        use_focal = False
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
+    criterion = nn.BCEWithLogitsLoss()  # UNet 用; ResNet34_UNet 改用 focal_loss
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='max', factor=0.5, patience=5, min_lr=1e-6
     )
@@ -69,7 +75,10 @@ def main(args):
                 dh = (masks.shape[-2] - oh) // 2
                 dw = (masks.shape[-1] - ow) // 2
                 masks = masks[:, :, dh:dh+oh, dw:dw+ow]
-            loss = criterion(outputs, masks) + dice_loss(outputs, masks)
+            if use_focal:
+                loss = focal_loss(outputs, masks) + dice_loss(outputs, masks)
+            else:
+                loss = criterion(outputs, masks) + dice_loss(outputs, masks)
             loss.backward()
             optimizer.step()
             
@@ -107,8 +116,11 @@ def main(args):
                     dh = (masks.shape[-2] - oh) // 2
                     dw = (masks.shape[-1] - ow) // 2
                     masks = masks[:, :, dh:dh+oh, dw:dw+ow]
-                loss = criterion(outputs, masks)
-                
+                if use_focal:
+                    loss = focal_loss(outputs, masks) + dice_loss(outputs, masks)
+                else:
+                    loss = criterion(outputs, masks)
+
                 # 計算當前 batch 的數值
                 current_loss = loss.item()
                 current_dice = dice_score(outputs, masks)
