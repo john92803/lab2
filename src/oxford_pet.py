@@ -43,10 +43,10 @@ class OxfordPetDataset(Dataset):
 
         # 訓練時才用的顏色擴增（只套用在 image，不套用在 mask）
         self.color_jitter = T.ColorJitter(
-            brightness=0.5,   # 亮度變化 ±50%
-            contrast=0.5,     # 對比度變化 ±50%
-            saturation=0.4,   # 飽和度變化 ±40%
-            hue=0.1           # 色調偏移 ±10%
+            brightness=0.2,   # 亮度變化 ±20%
+            contrast=0.2,     # 對比度變化 ±20%
+            saturation=0.2,   # 飽和度變化 ±20%
+            hue=0.05          # 色調偏移 ±5%
         )
 
     def __len__(self):
@@ -83,7 +83,7 @@ class OxfordPetDataset(Dataset):
             # ① RandomResizedCrop（取代固定 resize）
             #    用 get_params 取得一組隨機裁切參數，image 和 mask 同步套用
             i, j, h, w = T.RandomResizedCrop.get_params(
-                image, scale=(0.7, 1.0), ratio=(3/4, 4/3)
+                image, scale=(0.8, 1.0), ratio=(3/4, 4/3)
             )
             image = TF.resized_crop(image, i, j, h, w, (self.img_size, self.img_size), Image.BILINEAR)
             mask  = TF.resized_crop(mask,  i, j, h, w, (self.img_size, self.img_size), Image.NEAREST)
@@ -93,17 +93,8 @@ class OxfordPetDataset(Dataset):
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
-            # ③ 隨機旋轉 ±10 度：image 和 mask 套用相同角度
-            angle = random.uniform(-10, 10)
-            image = TF.rotate(image, angle)
-            mask  = TF.rotate(mask,  angle)
-
-            # ④ 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
+            # ③ 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
             image = self.color_jitter(image)
-
-            # ⑤ 隨機灰階：10% 機率轉成灰階，讓模型不過度依賴顏色
-            if random.random() < 0.1:
-                image = TF.rgb_to_grayscale(image, num_output_channels=3)
         else:
             # val/test：固定 resize，不做任何增強
             image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
