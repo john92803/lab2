@@ -56,7 +56,7 @@ def main(args):
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
     else:
         use_focal = False
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
     criterion = nn.BCEWithLogitsLoss()  # UNet 用; ResNet34_UNet 改用 focal_loss
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -140,7 +140,7 @@ def main(args):
                 if use_focal:
                     loss = focal_loss(outputs, masks) + dice_loss(outputs, masks)
                 else:
-                    loss = criterion(outputs, masks)
+                    loss = criterion(outputs, masks) + dice_loss(outputs, masks)
 
                 # 計算當前 batch 的數值
                 current_loss = loss.item()
