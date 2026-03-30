@@ -8,16 +8,9 @@ import torchvision.transforms.functional as TF
 
 
 class OxfordPetDataset(Dataset):
-    """Oxford-IIIT Pet Dataset for binary segmentation."""
 
     def __init__(self, root, split_file, mode="train", img_size=256):
-        """
-        Args:
-            root: path to dataset root (contains images/ and annotations/)
-            split_file: path to a txt file listing image names
-            mode: "train"/"val" (has mask) or "test" (no mask)
-            img_size: resize images to this size
-        """
+
         self.root = root
         self.img_size = img_size
         self.mode = mode
@@ -25,7 +18,6 @@ class OxfordPetDataset(Dataset):
         self.img_dir = os.path.join(root, "images")
         self.mask_dir = os.path.join(root, "annotations", "trimaps")
 
-        # Read split file (each line: image_name or "image_name col2 col3 ...")
         self.ids = []
         with open(split_file, "r") as f:
             for line in f:
@@ -34,19 +26,19 @@ class OxfordPetDataset(Dataset):
                 if os.path.exists(img_path):
                     self.ids.append(name)
 
-        print(f"[{mode}] Loaded {len(self.ids)} samples from {os.path.basename(split_file)}")
+        print(f"Loading from {os.path.basename(split_file)}")
 
         self.normalize = T.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225]
         )
 
-        # 訓練時才用的顏色擴增（只套用在 image，不套用在 mask）
+        # 顏色擴增
         self.color_jitter = T.ColorJitter(
-            brightness=0.5,   # 亮度變化 ±50%
-            contrast=0.5,     # 對比度變化 ±50%
-            saturation=0.4,   # 飽和度變化 ±40%
-            hue=0.1           # 色調偏移 ±10%
+            brightness=0.5,  
+            contrast=0.5,     
+            saturation=0.4,   
+            hue=0.1          
         )
 
     def __len__(self):
@@ -63,7 +55,6 @@ class OxfordPetDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
 
         if self.mode == "test":
-            # 紀錄原始尺寸 (寬, 高)
             orig_w, orig_h = image.size
             
             image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
@@ -78,34 +69,32 @@ class OxfordPetDataset(Dataset):
         binary_np = self._trimap_to_binary(trimap)
         mask = Image.fromarray(binary_np)
 
-        # ===== 資料擴增（只在 train mode 執行）=====
         if self.mode == "train":
-            # ① RandomResizedCrop（取代固定 resize）
-            #    用 get_params 取得一組隨機裁切參數，image 和 mask 同步套用
+            # 隨機裁切
             i, j, h, w = T.RandomResizedCrop.get_params(
                 image, scale=(0.7, 1.0), ratio=(3/4, 4/3)
             )
             image = TF.resized_crop(image, i, j, h, w, (self.img_size, self.img_size), Image.BILINEAR)
             mask  = TF.resized_crop(mask,  i, j, h, w, (self.img_size, self.img_size), Image.NEAREST)
 
-            # ② 水平翻轉：image 和 mask 使用相同的隨機決定
+            # 水平翻轉
             if random.random() > 0.5:
                 image = TF.hflip(image)
                 mask  = TF.hflip(mask)
 
-            # ③ 隨機旋轉 ±10 度：image 和 mask 套用相同角度
+            # 隨機旋轉
             angle = random.uniform(-10, 10)
             image = TF.rotate(image, angle)
             mask  = TF.rotate(mask,  angle)
 
-            # ④ 顏色抖動：調整亮度、對比、飽和度、色調（只套用在 image）
+            # 顏色抖動
             image = self.color_jitter(image)
 
-            # ⑤ 隨機灰階：10% 機率轉成灰階，讓模型不過度依賴顏色
+            # 隨機灰階
             if random.random() < 0.1:
                 image = TF.rgb_to_grayscale(image, num_output_channels=3)
         else:
-            # val/test：固定 resize，不做任何增強
+            # 不做任何增強
             image = image.resize((self.img_size, self.img_size), Image.BILINEAR)
             mask = mask.resize((self.img_size, self.img_size), Image.NEAREST)
 
@@ -117,18 +106,7 @@ class OxfordPetDataset(Dataset):
 
 
 def get_dataloaders(data_root, test_file="test_unet.txt", img_size=256, batch_size=16, num_workers=2):
-    """
-    Create train, val, test dataloaders using Kaggle splits in annotations/.
 
-    Split files used:
-        annotations/kaggle_train.txt   -> train (5173)
-        annotations/kaggle_val.txt     -> val   (739)
-        annotations/{test_file}        -> test  (739)
-
-    Args:
-        data_root: path to dataset root (e.g. dataset/oxford-iiit-pet)
-        test_file: "test_unet.txt" or "test_res_unet.txt"
-    """
     ann_dir = os.path.join(data_root, "annotations")
 
     train_dataset = OxfordPetDataset(data_root, os.path.join(ann_dir, "kaggle_train.txt"), mode="train", img_size=img_size)
@@ -139,5 +117,4 @@ def get_dataloaders(data_root, test_file="test_unet.txt", img_size=256, batch_si
     val_loader   = DataLoader(val_dataset,   batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     test_loader  = DataLoader(test_dataset,  batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
-    print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")
     return train_loader, val_loader, test_loader

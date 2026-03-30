@@ -1,0 +1,18 @@
+Claude was used as an AI assistant throughout this project, providing architectural and training strategy guidance.
+
+Training images use random augmentation: RandomResizedCrop, horizontal flip , rotation, ColorJitter, and RandomGrayscale. Spatial transforms are applied synchronously to image and mask; color transforms apply to images only. Normalization uses ImageNet mean/std. Validation and test sets use fixed resize only.
+
+UNet follows the original paper with padding=0 and center crop skip connections. Since padding=0 causes output smaller than input, the Overlap-tile strategy was adopted. Zero padding was initially tried but hurt inference due to artificial borders. Reflect padding was used instead, mirroring boundary content, and the output is center-cropped back to original size. Applying this consistently across train, val, and inference reduced the val-test Dice gap from 0.10 to nearly zero. Loss: BCE + Dice. Optimizer: AdamW with weight decay.
+
+ResNet34UNet uses a ResNet34 encoder (Block counts [3,4,6,3]) with a UNet-style decoder enhanced with CBAM attention (Channel then Spatial). The s3 feature (256ch) is projected to 512ch via Conv1x1 and concatenated as 32+512. All decoder blocks output fixed 32ch. Following the reference paper, Focal + Dice loss and SGD with momentum are used.
+
+Both models use lr scheduler and early stopping.
+UNet trains slower because reflect padding expands the input from 256x256 to 444x444 per forward pass. ResNet34UNet is faster since its decoder is lightweight (fixed 32ch output) and requires no padding expansion. Both models achieved a val Dice and test Dice of 0.90.
+
+train:
+    python src/train.py --model unet --epochs 200 --patience 20 --lr 3e-4 --img_size 256
+    python src/train.py --model resnet34_unet --epochs 200 --patience 20
+
+inference:
+    python src/inference.py --model unet
+    python src/inference.py --model resnet34_unet
