@@ -123,10 +123,10 @@ class ResNet34UNet(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-        self.de1 = Decoder(512, 256, 32)   
-        self.de2 = Decoder(32, 512, 32)   
-        self.de3 = Decoder(32, 128, 32)   
-        self.de4 = Decoder(32, 64, 32)   
+        self.dec1 = Decoder(512, 256, 32)
+        self.dec2 = Decoder(32, 512, 32)
+        self.dec3 = Decoder(32, 128, 32)
+        self.dec4 = Decoder(32, 64, 32)
 
         self.final_up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         self.output   = nn.Conv2d(32, out_channels, kernel_size=1)
@@ -134,17 +134,17 @@ class ResNet34UNet(nn.Module):
     def forward(self, x):
         s1, s2, s3, s4 = self.en(x)
 
-        d1 = self.de1(s4, s3)
+        d1 = self.dec1(s4, s3)
 
         s3_proj = self.s3_proj(s3)                                              # [512, 16, 16]
         s3_proj_32 = F.interpolate(s3_proj, scale_factor=2,
                                    mode='bilinear', align_corners=True)         # [512, 32, 32]
-        d2 = self.de2(d1, s3_proj_32)
+        d2 = self.dec2(d1, s3_proj_32)
 
         s2_64 = F.interpolate(s2, scale_factor=2, mode='bilinear', align_corners=True)
-        d3 = self.de3(d2, s2_64)
+        d3 = self.dec3(d2, s2_64)
 
         s1_128 = F.interpolate(s1, scale_factor=2, mode='bilinear', align_corners=True)
-        d4 = self.de4(d3, s1_128)
+        d4 = self.dec4(d3, s1_128)
 
         return self.output(self.final_up(d4))
